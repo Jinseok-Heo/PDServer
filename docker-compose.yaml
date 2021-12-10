@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  redis:
+      image: redis
+      command: redis-server --port 6379
+      container_name: redis_database
+      ports:
+        - 6379:6379
+      networks:
+        - fullstack
+  db:
+    image: mysql:latest
+    container_name: "plantdoctorDB"
+    restart: always
+    ports:
+      - "3306:3306"
+    env_file: .env
+    environment:
+      - TZ=Asia/Seoul
+    networks:
+      - fullstack
+    volumes:
+      - ./database/conf.d:/etc/mysql/conf.d
+      - /Users/Shared/data/pd-database:/var/lib/mysql
+      - ./database/initdb.d:/docker-entrypoint-initdb.d
+  api:
+    build: .
+    container_name: "plantdoctor_api"
+    environment:
+      - ACCESS_SECRET=qaYpjHVU1M1n_GIRMYg0CAhqb1tIqcZmOBvaVH1UY92LJIwdHOF697Cm_3kfei85HMGXnpLvGB73V7TAwCVgW9do-YfK5FNIFB22ox8WS0qXxxpj_lhalM0oXwSOyUE7kuUjjfp50LhA2l42tj2HTBylds6nEhA_yqkT0EeAyZM
+      - REFRESH_SECRET=87nc8-doCWripF0Gh7H08oPP1GfJsZk1BlCYn_5NCqpWJGQFj-QVWgIJ488QVDMNok5rmW3Ke_x2mPnM43QXzf4sRsr8GhUBrgZ-muTUt8wyN-3mZD_3piitWydAETBHfei5im9ps-0e24niu7GNTucnMxNiGOwQpZBItgBOV90
+      - DB_USER=plantdoctor
+      - DB_PASSWORD=plantdoctor
+      - DB_NAME=plantdoctor
+      - DB_HOST=plantdoctorDB
+      - DB_PORT=3306
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - fullstack
+
+volumes:
+  database_mysql: 
+
+networks:
+  fullstack:
+    driver: bridge
