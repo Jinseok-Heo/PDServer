@@ -33,12 +33,12 @@ func NewHandler(userService *api.UserDB, tokenService *api.TokenDB, naverService
 }
 
 func (h *Handler) LocalRegister(ctx *gin.Context) {
-	var user *model.User
-	if err := ctx.ShouldBindJSON(user); err != nil {
+	var user model.User
+	if err := ctx.ShouldBindJSON(&user); err != nil {
 		ctx.JSON(http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	if err := h.UserAPIService.Post(user); err != nil {
+	if err := h.UserAPIService.Post(&user); err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -47,16 +47,16 @@ func (h *Handler) LocalRegister(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
-	ctx.JSON(http.StatusOK, model.LoginResponse{Token: *token, User: *user})
+	ctx.JSON(http.StatusOK, model.LoginResponse{Token: *token, User: user})
 }
 
 func (h *Handler) LocalLogin(ctx *gin.Context) {
-	var user *model.User
+	var user model.User
 	if err := ctx.ShouldBindJSON(user); err != nil {
 		ctx.JSON(http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	user, err := h.UserAPIService.Get(user)
+	_, err := h.UserAPIService.Get(&user)
 	if err != nil {
 		ctx.JSON(http.StatusUnauthorized, err.Error())
 		return
@@ -66,7 +66,7 @@ func (h *Handler) LocalLogin(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
-	ctx.JSON(http.StatusOK, model.LoginResponse{Token: *token, User: *user})
+	ctx.JSON(http.StatusOK, model.LoginResponse{Token: *token, User: user})
 }
 
 func (h *Handler) NaverLogin(ctx *gin.Context) {
@@ -85,24 +85,26 @@ func (h *Handler) NaverCallback(ctx *gin.Context) {
 		ctx.Redirect(http.StatusInternalServerError, "plantdoctor://")
 		return
 	}
-	user, err = h.UserAPIService.Get(user)
+	foundUser, err := h.UserAPIService.Get(user)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		if err = h.UserAPIService.Post(user); err != nil {
 			ctx.Redirect(http.StatusInternalServerError, "plantdoctor://")
 			return
+		} else {
+			foundUser = user
 		}
 	}
 	if err != nil {
 		ctx.Redirect(http.StatusInternalServerError, "plantdoctor://")
 		return
 	}
-	token, err := h.Authenticate(user.ID)
+	token, err := h.Authenticate(foundUser.ID)
 	if err != nil {
 		ctx.Redirect(http.StatusInternalServerError, "plantdoctor://")
 		return
 	}
-	userID := strconv.FormatUint(user.ID, 10)
-	ctx.Redirect(http.StatusOK, fmt.Sprintf("plantdoctor://?access_token=%s&&refresh_token=%s&&user_id=%s", token.AccessToken, token.RefreshToken, userID))
+	userID := strconv.FormatUint(foundUser.ID, 10)
+	ctx.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("plantdoctor://?access_token=%s&&refresh_token=%s&&user_id=%s", token.AccessToken, token.RefreshToken, userID))
 }
 
 func (h *Handler) Authenticate(userID uint64) (*model.Token, error) {
@@ -132,14 +134,12 @@ func (h *Handler) SendEmail(ctx *gin.Context) {
 		}
 		return
 	}
-	code, err := h.OTPAPIService.SendEmail(email)
+	err = h.OTPAPIService.SendEmail(email)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
-	ctx.JSON(http.StatusOK, map[string]string{
-		"code": code,
-	})
+	ctx.JSON(http.StatusOK, "Successfully sent email")
 }
 
 func (h *Handler) VerifyCode(ctx *gin.Context) {
@@ -208,6 +208,25 @@ func (h *Handler) RefreshToken(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, token)
 }
 
+func (h *Handler) GetUser(ctx *gin.Context) {
+	userIDStr := ctx.Query("user_id")
+	if userIDStr == "" {
+		ctx.JSON(http.StatusBadRequest, "Invalid userID query")
+		return
+	}
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, err.Error())
+		return
+	}
+	user, err := h.UserAPIService.GetWithID(userID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+	ctx.JSON(http.StatusOK, user)
+}
+
 func (h *Handler) ValidateTokenMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		accessToken, err := h.ExtractAccessToken(ctx.Request)
@@ -217,6 +236,7 @@ func (h *Handler) ValidateTokenMiddleware() gin.HandlerFunc {
 			return
 		}
 		if err := h.TokenAPIService.Validate(accessToken); err != nil {
+			fmt.Println(err.Error())
 			ctx.JSON(http.StatusUnauthorized, err.Error())
 			ctx.Abort()
 			return

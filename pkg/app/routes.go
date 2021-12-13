@@ -7,14 +7,15 @@ func (h *Handler) SetupRoutes() {
 		auth.GET("/naver", h.NaverLogin)
 		auth.GET("/naver/callback", h.NaverCallback)
 		auth.POST("/local", h.LocalLogin)
-		auth.DELETE("", h.Logout)
-		auth.POST("/re", h.RefreshToken)
+		auth.DELETE("", h.ValidateTokenMiddleware(), h.Logout)
+		auth.POST("/re", h.ValidateTokenMiddleware(), h.RefreshToken)
 		auth.GET("/mail", h.SendEmail)
 		auth.POST("/code", h.VerifyCode)
 		auth.GET("/nickname/available", h.Available)
 	}
 	users := h.Engin.Group("/users")
 	{
-		users.DELETE("")
+		users.GET("/user", h.ValidateTokenMiddleware(), h.GetUser)
+		users.DELETE("/user")
 	}
 }

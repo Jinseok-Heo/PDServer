@@ -14,6 +14,7 @@ type UserDB struct {
 
 type UserAPIService interface {
 	Post(model.User) error
+	GetWithID(uint64) (*model.User, error)
 	Get(*model.User) (model.User, error)
 	Delete(uint64) error
 	Available(string, string) (bool, error)
@@ -31,6 +32,15 @@ func (db *UserDB) Post(user *model.User) error {
 		return res.Error
 	}
 	return nil
+}
+
+func (db *UserDB) GetWithID(userID uint64) (*model.User, error) {
+	var user model.User
+	fmt.Println(userID)
+	if res := db.Storage.First(&user, userID); res.Error != nil {
+		return nil, res.Error
+	}
+	return &user, nil
 }
 
 // GetUser - Get user from database

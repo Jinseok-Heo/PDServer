@@ -36,11 +36,11 @@ func (o *OTPAPIService) GenerateCode() (string, error) {
 	return code, nil
 }
 
-func (o *OTPAPIService) SendEmail(email string) (string, error) {
+func (o *OTPAPIService) SendEmail(email string) error {
 	dial := gomail.NewDialer("smtp.gmail.com", 587, gmail, pwd)
 	res, err := dial.Dial()
 	if err != nil {
-		return "", err
+		return err
 	}
 	code, err := o.GenerateCode()
 	msg := gomail.NewMessage()
@@ -51,9 +51,9 @@ func (o *OTPAPIService) SendEmail(email string) (string, error) {
 	})
 	msg.SetBody("text/plain", fmt.Sprintf("인증코드: %s", code))
 	if err := gomail.Send(res, msg); err != nil {
-		return "", err
+		return err
 	}
-	return code, nil
+	return nil
 }
 
 func (o *OTPAPIService) Validate(code string) bool {

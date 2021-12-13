@@ -56,7 +56,7 @@ func (db *TokenDB) Create(id uint64) (*model.TokenMetaData, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &model.TokenMetaData{AccessToken: accessToken, RefreshToken: refreshToken,
+	return &model.TokenMetaData{AccessToken: accessToken, RefreshToken: refreshToken, AccessUUID: accessUUID, RefreshUUID: refreshUUID,
 		AtExpire: atExpire, RtExpire: rtExpire, UserID: id}, nil
 }
 
@@ -65,11 +65,10 @@ func (db *TokenDB) Post(tmd *model.TokenMetaData) (*model.Token, error) {
 	atExpire := time.Unix(tmd.AtExpire, 0)
 	rtExpire := time.Unix(tmd.RtExpire, 0)
 	now := time.Now()
-
-	if res := db.Storage.Set(tmd.AccessUUID, strconv.Itoa(int(tmd.UserID)), atExpire.Sub(now)); res != nil {
+	if res := db.Storage.Set(tmd.AccessUUID, strconv.Itoa(int(tmd.UserID)), atExpire.Sub(now)); res.Err() != nil {
 		return nil, res.Err()
 	}
-	if res := db.Storage.Set(tmd.RefreshUUID, strconv.Itoa(int(tmd.UserID)), rtExpire.Sub(now)); res != nil {
+	if res := db.Storage.Set(tmd.RefreshUUID, strconv.Itoa(int(tmd.UserID)), rtExpire.Sub(now)); res.Err() != nil {
 		return nil, res.Err()
 	}
 	return &model.Token{AccessToken: tmd.AccessToken, RefreshToken: tmd.RefreshToken}, nil
@@ -77,7 +76,7 @@ func (db *TokenDB) Post(tmd *model.TokenMetaData) (*model.Token, error) {
 
 // Repost - Update token information
 func (db *TokenDB) RePost(refreshToken string) (*model.Token, error) {
-	token, err := jwt.Parse(refreshToken, KeyFunc)
+	token, err := jwt.Parse(refreshToken, RefreshKeyFunc)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +111,8 @@ func (db *TokenDB) RePost(refreshToken string) (*model.Token, error) {
 }
 
 // Validate - Verify the token is valid
-func (db *TokenDB) Validate(token string) error {
-	jwtToken, err := jwt.Parse(token, KeyFunc)
+func (db *TokenDB) Validate(accessToken string) error {
+	jwtToken, err := jwt.Parse(accessToken, AccessKeyFunc)
 	if err != nil {
 		return err
 	}
@@ -125,7 +124,7 @@ func (db *TokenDB) Validate(token string) error {
 
 // FetchUserID - Fetch User ID from access token
 func (db *TokenDB) GetTokenMetaData(accessToken string) (*model.TokenMetaData, error) {
-	jwtToken, err := jwt.Parse(accessToken, KeyFunc)
+	jwtToken, err := jwt.Parse(accessToken, AccessKeyFunc)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +163,14 @@ func (db *TokenDB) Delete(tmd *model.TokenMetaData) error {
 	return nil
 }
 
-func KeyFunc(token *jwt.Token) (interface{}, error) {
+func AccessKeyFunc(token *jwt.Token) (interface{}, error) {
+	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+	}
+	return []byte(model.ACCESS_SECRET), nil
+}
+
+func RefreshKeyFunc(token *jwt.Token) (interface{}, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 	}
